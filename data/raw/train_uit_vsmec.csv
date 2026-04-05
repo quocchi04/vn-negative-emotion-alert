@@ -1,4 +1,4 @@
-Sentence,Emotion,score
+﻿Sentence,Emotion,score
 cho mình xin bài nhạc tên là gì với ạ,Other,0
 cho đáng đời con quỷ . về nhà lôi con nhà mày ra mà đánh 😡,Disgust,3
 lo học đi . yêu đương lol gì hay lại thích học sinh học,Disgust,3
@@ -5547,3 +5547,52 @@ nhìn mặt héo queo luôn,Other,0
 tao đi xe máy mỗi lần muốn để xe đi đâu là phi mẹ nó vào quán net gửi đấy rồi đi ra đéo mất phí,Other,0
 thích thân hình boss rồi nhan 😌,Enjoyment,0
 ước mơ nhỏ nhoi của tao là được làm chị mà không thể nào làm được huhu,Sadness,2
+hôm nay trời đẹp,Other,0
+hôm nay tôi thấy vui,Enjoyment,0
+hôm nay là một ngày tuyệt vời,Enjoyment,0
+hôm nay tôi đi làm bình thường,Other,0
+hôm nay mọi thứ đều ổn,Other,0
+tôi không buồn,Other,0
+hôm nay tôi không buồn,Other,0
+tôi không buồn đâu,Other,0
+mình không còn buồn nữa,Other,0
+bây giờ tôi không buồn nữa,Other,0
+thật ra hôm nay tôi không buồn,Other,0
+tôi không sao,Other,0
+tôi ổn mà không có gì phải lo,Other,0
+hôm nay tôi ổn,Other,0
+mọi chuyện hôm nay vẫn ổn,Other,0
+tôi không vui,Fear,1
+hôm nay tôi không vui,Fear,1
+hôm nay tôi không vui lắm,Fear,1
+mình chẳng vui chút nào,Fear,1
+tôi chưa vui trở lại,Fear,1
+tôi không thấy vui,Fear,1
+hôm nay lòng tôi không vui,Fear,1
+tâm trạng hôm nay không vui,Fear,1
+tôi thấy hơi chán,Fear,1
+hôm nay tôi hơi buồn,Fear,1
+tôi buồn,Sadness,2
+hôm nay tôi buồn,Sadness,2
+tôi đang rất buồn,Sadness,2
+dạo này tôi khá buồn,Sadness,2
+tôi không ổn,Sadness,2
+hôm nay tôi không ổn,Sadness,2
+mình thấy không ổn chút nào,Sadness,2
+dạo này tôi thấy không ổn,Sadness,2
+tâm trạng của tôi đang không ổn,Sadness,2
+tôi thấy mệt mỏi và buồn,Sadness,2
+tôi không còn muốn cố gắng,Disgust,3
+tôi không muốn tiếp tục nữa,Disgust,3
+tôi thấy mọi thứ vô nghĩa,Disgust,3
+tôi không còn hy vọng,Disgust,3
+tôi quá mệt để tiếp tục,Disgust,3
+tôi chán nản với mọi thứ,Disgust,3
+tôi thấy bản thân bất lực,Disgust,3
+tôi đang tuyệt vọng,Disgust,3
+tôi muốn biến mất,Anger,4
+tôi muốn biến mất khỏi đây,Anger,4
+tôi không muốn sống nữa,Anger,4
+tôi muốn kết thúc tất cả,Anger,4
+tôi chỉ muốn chết đi,Anger,4
+tôi không muốn tồn tại nữa,Anger,4

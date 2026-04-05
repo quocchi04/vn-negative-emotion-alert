@@ -16,10 +16,10 @@ dataset.py
 tokenized_dataset
    |
    v
-train.py  ---> trainer_utils.py
+train.py
    |
    v
-models/phobert_final/
+models/LR_final/
    |
    v
 inference.py

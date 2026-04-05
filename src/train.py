@@ -1,61 +1,87 @@
+import joblib
+import pandas as pd
 from pathlib import Path
-from transformers import (
-    AutoModelForSequenceClassification,
-    TrainingArguments,
-    Trainer
-)
+from sklearn.pipeline import FeatureUnion
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
-from src.config import MODEL_NAME, NUM_LABELS, MODEL_SAVE_PATH, OUTPUT_DIR
-from src.dataset import build_dataset_dict, tokenize_dataset
-from src.trainer_utils import compute_metrics
+from src.config import TRAIN_PATH, VAL_PATH, MODEL_SAVE_PATH, VECTORIZER_SAVE_PATH
+
+
+def build_vectorizer():
+    word_tfidf = TfidfVectorizer(
+        analyzer="word",
+        ngram_range=(1, 3),
+        min_df=1,
+        max_df=0.95,
+        sublinear_tf=True
+    )
+
+    char_tfidf = TfidfVectorizer(
+        analyzer="char_wb",
+        ngram_range=(3, 5),
+        min_df=1,
+        sublinear_tf=True
+    )
+
+    return FeatureUnion([
+        ("word", word_tfidf),
+        ("char", char_tfidf),
+    ])
+
+
+def evaluate_model(model, X_val, y_val):
+    y_pred = model.predict(X_val)
+    acc = accuracy_score(y_val, y_pred)
+    macro_f1 = f1_score(y_val, y_pred, average="macro")
+
+    print("\n===== LogisticRegression =====")
+    print(f"Accuracy : {acc:.4f}")
+    print(f"Macro F1 : {macro_f1:.4f}")
+    print("\nClassification Report:")
+    print(classification_report(y_val, y_pred, digits=4))
+
+    return acc, macro_f1
+
 
 def main():
-    dataset = build_dataset_dict()
-    tokenized_dataset, tokenizer = tokenize_dataset(dataset) 
+    print("Dang doc du lieu...")
+    train_df = pd.read_csv(TRAIN_PATH)
+    val_df = pd.read_csv(VAL_PATH)
 
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME,
-        num_labels=NUM_LABELS   # số lớp
+    X_train_text = train_df["text"].astype(str)
+    y_train = train_df["label"]
+
+    X_val_text = val_df["text"].astype(str)
+    y_val = val_df["label"]
+
+    print("Dang build vectorizer...")
+    vectorizer = build_vectorizer()
+
+    print("Dang fit vectorizer...")
+    X_train = vectorizer.fit_transform(X_train_text)
+    X_val = vectorizer.transform(X_val_text)
+
+    model = LogisticRegression(
+        C=2.0,
+        max_iter=3000,
+        class_weight="balanced",
+        solver="lbfgs"
     )
 
-    # Tạo thư mục nếu chưa tồn tại
-    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-    Path(MODEL_SAVE_PATH).mkdir(parents=True, exist_ok=True)
+    print("Dang train LogisticRegression...")
+    model.fit(X_train, y_train)
 
-    training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
-        eval_strategy="epoch",  #Sau mỗi epoch, model sẽ evaluate trên validation set
-        save_strategy="epoch",
-        logging_strategy="epoch",
-        learning_rate=2e-5,
-        per_device_train_batch_size=8,  
-        per_device_eval_batch_size=8,
-        num_train_epochs=3,             # model đi qua toàn bộ tập train 3 lần
-        weight_decay=0.01,              # giúp giảm overfitting bằng cách phạt các trọng số lớn
-        load_best_model_at_end=True,    # train xong -> load lại model tốt nhất dựa trên macro_f1
-        metric_for_best_model="macro_f1",
-        greater_is_better=True,
-        save_total_limit=2, # chỉ giữ lại 2 checkpoint gần nhất để tiết kiệm dung lượng lưu trữ
-        report_to="none"
-    )
+    evaluate_model(model, X_val, y_val)
+    Path(MODEL_SAVE_PATH).parent.mkdir(parents=True, exist_ok=True)
+    Path(VECTORIZER_SAVE_PATH).parent.mkdir(parents=True, exist_ok=True)
 
-    trainer = Trainer(    # quản lý toàn bộ quá trình train/evaluate 
-        model=model,
-        args=training_args,
-        train_dataset=tokenized_dataset["train"],
-        eval_dataset=tokenized_dataset["validation"],   # dùng để đánh giá sau mỗi epoch và chọn model tốt nhất
-        compute_metrics=compute_metrics
-    )
+    joblib.dump(vectorizer, VECTORIZER_SAVE_PATH)
+    joblib.dump(model, MODEL_SAVE_PATH)
 
-    trainer.train()
+    print("\nDa luu model va vectorizer.")
 
-    print("\n=== Evaluate on test ===")
-    test_results = trainer.evaluate(tokenized_dataset["test"])
-    print(test_results)
-
-    trainer.save_model(MODEL_SAVE_PATH)
-    tokenizer.save_pretrained(MODEL_SAVE_PATH)
-    print(f"Saved model to: {MODEL_SAVE_PATH}")
 
 if __name__ == "__main__":
     main()

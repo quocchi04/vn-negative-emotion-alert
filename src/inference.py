@@ -1,44 +1,47 @@
-import torch
-import re
-import unicodedata
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from src.config import MODEL_SAVE_PATH, MAX_LENGTH
+import joblib
 
-# làm sạch văn bản đầu vào
-def clean_input_text(text: str) -> str:
-    text = str(text)
-    text = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", text)
-    text = unicodedata.normalize("NFKC", text)
-    text = re.sub(r"\s+", " ", text).strip().lower()
-    return text
+try:
+    from src.config import MODEL_SAVE_PATH, VECTORIZER_SAVE_PATH
+    from src.preprocessing import clean_text
+except ModuleNotFoundError:
+    from config import MODEL_SAVE_PATH, VECTORIZER_SAVE_PATH
+    from preprocessing import clean_text
+
+
+try:
+    GLOBAL_VECTORIZER = joblib.load(VECTORIZER_SAVE_PATH)
+    GLOBAL_MODEL = joblib.load(MODEL_SAVE_PATH)
+except Exception:
+    GLOBAL_VECTORIZER = None
+    GLOBAL_MODEL = None
+
 
 def load_model():
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_SAVE_PATH)  # Load tokenizer 
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_SAVE_PATH)
-    model.eval() # chuyển model sang chế độ đánh giá, tắt dropout đảm bảo model dự đoán ổn định hơn
-    return tokenizer, model
+    return GLOBAL_VECTORIZER, GLOBAL_MODEL
 
-# dự đoán nhãn cho một văn bản đầu vào
-def predict_text(text: str, tokenizer, model):
-    cleaned_text = clean_input_text(text)
 
-    # tokenize 
-    inputs = tokenizer(
-        cleaned_text,
-        return_tensors="pt", # Trả về dữ liệu dạng tensor PyTorch
-        truncation=True,
-        padding=True,
-        max_length=MAX_LENGTH
-    )
+def predict_text(text, vectorizer=None, model=None):
+    v = vectorizer if vectorizer is not None else GLOBAL_VECTORIZER
+    m = model if model is not None else GLOBAL_MODEL
 
-    with torch.no_grad():
-        outputs = model(**inputs) # Đưa dữ liệu đã được tokenize vào model để nhận dự đoán
-        probs = torch.softmax(outputs.logits, dim=-1)[0] # Chuyển logits thành xác suất bằng hàm softmax, lấy phần tử đầu tiên vì chỉ có một văn bản đầu vào
-        pred = torch.argmax(probs).item() # Lấy nhãn có xác suất cao nhất làm dự đoán cuối cùng
+    if m is None or v is None:
+        raise RuntimeError("Model chưa được load. Hãy train lại hoặc kiểm tra đường dẫn.")
+
+    cleaned = clean_text(text)
+    x = v.transform([cleaned])
+
+    label = int(m.predict(x)[0])
+
+    if hasattr(m, "predict_proba"):
+        probs = m.predict_proba(x)[0].tolist()
+        confidence = float(max(probs))
+    else:
+        probs = None
+        confidence = None
 
     return {
-        "original_text": text,
-        "cleaned_text": cleaned_text,
-        "predicted_label": pred,
-        "probabilities": probs.cpu().numpy().tolist()
+        "predicted_label": label,
+        "probabilities": probs,
+        "confidence": confidence,
+        "cleaned_text": cleaned
     }

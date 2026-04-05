@@ -1,27 +1,43 @@
 import os
-from pathlib import Path
-from typing import Optional, Tuple
-
-import numpy as np
+import sys
 import pandas as pd
+import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
-import seaborn as sns  # Thêm seaborn để vẽ biểu đồ đẹp hơn
+import seaborn as sns
+from pathlib import Path
+from typing import Optional, Tuple # Sửa lỗi NameError: 'Optional' is not defined
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
+# --- KHẮC PHỤC LỖI ĐƯỜNG DẪN ---
+root_path = Path(__file__).parent.absolute()
+src_path = root_path / "src"
+if str(src_path) not in sys.path:
+    sys.path.append(str(src_path))
+
+# --- IMPORT CÁC HÀM TỪ TRONG SRC ---
 try:
-    # Cách 1: Chạy từ thư mục gốc (app.py nằm ngoài, các file khác trong src/)
-    from src.inference import load_model, predict_text
-    from src.utils import get_label_name, get_risk_level
-    from src.config import TRAIN_PATH, VAL_PATH, TEST_PATH
-    from src.trainer_utils import compute_metrics 
-except (ImportError, ModuleNotFoundError):
-    # Cách 2: Chạy khi Python đã coi src là thư mục thực thi chính
-    from inference import load_model, predict_text
+    # Sau khi append sys.path, ta gọi trực tiếp tên file
+    from inference import predict_text 
     from utils import get_label_name, get_risk_level
     from config import TRAIN_PATH, VAL_PATH, TEST_PATH
     from trainer_utils import compute_metrics
+    
+    # Vì file inference.py của bạn KHÔNG có load_model, 
+    # ta sẽ tự định nghĩa một hàm giả lập ở đây để app không sập
+    def load_model():
+        import joblib
+        from config import MODEL_SAVE_PATH, VECTORIZER_SAVE_PATH
+        try:
+            v = joblib.load(VECTORIZER_SAVE_PATH)
+            m = joblib.load(MODEL_SAVE_PATH)
+            return v, m
+        except:
+            return None, None
 
+except ImportError as e:
+    st.error(f"❌ Lỗi Import: {e}. Hãy chắc chắn các file nằm trong thư mục 'src'.")
+    st.stop()
 # 1. Cấu hình trang
 st.set_page_config(
     page_title="VN Negative Emotion Alert",
@@ -82,14 +98,14 @@ def build_overview_table(train_df: Optional[pd.DataFrame], val_df: Optional[pd.D
 
 @st.cache_data
 def evaluate_model_cached(test_df: pd.DataFrame):
-    tokenizer, model = load_resources()
+    vectorizer, model = load_resources()
 
     y_true = []
     y_pred = []
     for _, row in test_df.iterrows():
-        text = row["Sentence"]
-        label = int(row["score"])
-        pred = int(predict_text(text, tokenizer, model)["predicted_label"])
+        text = row["text"]
+        label = int(row["label"])
+        pred = int(predict_text(text, vectorizer, model)["predicted_label"])
         y_true.append(label)
         y_pred.append(pred)
 
@@ -105,7 +121,7 @@ def evaluate_model_cached(test_df: pd.DataFrame):
 
 # --- CÁC HÀM VẼ BIỂU ĐỒ ---
 def plot_score_distribution(df: pd.DataFrame):
-    counts = df["score"].value_counts().sort_index()
+    counts = df["label"].value_counts().sort_index()
     fig, ax = plt.subplots(figsize=(7, 4))
     bars = ax.bar(counts.index.astype(str), counts.values, color='#4b72b8', edgecolor='black')
     ax.set_title("Phân phối nhãn Score", fontsize=12, fontweight='bold')
@@ -116,7 +132,7 @@ def plot_score_distribution(df: pd.DataFrame):
     st.pyplot(fig)
 
 def plot_text_length_distribution(df: pd.DataFrame):
-    lengths = df["Sentence"].astype(str).str.split().apply(len)
+    lengths = df["text"].fillna("").astype(str).apply(lambda x: len(x.split()))
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.hist(lengths, bins=30, color='#e67e22', edgecolor='black', alpha=0.8)
     ax.set_title("Phân phối độ dài văn bản", fontsize=12, fontweight='bold')
@@ -201,23 +217,26 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
     # Hàng 1: Phân phối Score và Độ dài văn bản
     row1_col1, row1_col2 = st.columns(2)
     with row1_col1:
-        if "score" in train_df.columns:
+        if "label" in train_df.columns:
             plot_score_distribution(train_df)
     with row1_col2:
-        if "Sentence" in train_df.columns:
+        if "text" in train_df.columns:
             plot_text_length_distribution(train_df)
 
     # Tính toán đặc trưng độ dài
+  # Tính toán đặc trưng độ dài
     train_df_copy = train_df.copy()
-    train_df_copy['Length'] = train_df_copy['Sentence'].astype(str).apply(lambda x: len(x.split()))
+    
+    # ĐÃ THÊM .fillna("") ĐỂ CHỐNG LỖI Ô TRỐNG
+    train_df_copy['Length'] = train_df_copy['text'].fillna("").astype(str).apply(lambda x: len(x.split()))
 
     # Hàng 2: Ma trận tương quan (Đặt vào giữa để không bị quá to)
-    if "score" in train_df.columns:
+    if "label" in train_df.columns:
         # Chia làm 3 cột, biểu đồ nằm ở cột giữa (tỷ lệ 1:2:1)
         _, mid_col, _ = st.columns([1, 2, 1]) 
         
         with mid_col:
-            corr_matrix = train_df_copy[['score', 'Length']].corr()
+            corr_matrix = train_df_copy[['label', 'Length']].corr()
             corr_val = corr_matrix.iloc[0, 1]
             
             # Giảm figsize xuống (ví dụ 5x3) để biểu đồ trông gọn hơn
@@ -226,8 +245,8 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
             im = ax.imshow(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1)
             ax.set_xticks([0, 1])
             ax.set_yticks([0, 1])
-            ax.set_xticklabels(['Score', 'Độ dài'], fontsize=9)
-            ax.set_yticklabels(['Score', 'Độ dài'], fontsize=9)
+            ax.set_xticklabels(['label', 'Độ dài'], fontsize=9)
+            ax.set_yticklabels(['label', 'Độ dài'], fontsize=9)
             ax.set_title(f"Ma trận tương quan (r = {corr_val:.2f})", fontsize=10, fontweight='bold')
             
             # Thêm chỉ số text vào trong các ô của ma trận
@@ -241,8 +260,8 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
 
     # PHẦN NHẬN XÉT
     with st.expander("📝 Phân tích chi tiết đặc trưng dữ liệu", expanded=True):
-            if "score" in train_df.columns:
-                counts = train_df["score"].value_counts(normalize=True).sort_index()
+            if "label" in train_df.columns:
+                counts = train_df["label"].value_counts(normalize=True).sort_index()
                 # Tính toán chỉ số lệch
                 imbalance_ratio = counts.max() / counts.min()
                 is_imbalanced = "CÓ độ lệch" if imbalance_ratio > 2 else "tương đối CÂN BẰNG"
@@ -269,12 +288,17 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
                     st.warning("⚠️ Dữ liệu vẫn còn một số giá trị thiếu, cần xử lý trước khi train.")
 
 #-------------------------- Phần 2: Triển khai mô hình  ---------------------------                 
-def render_prediction_tab(tokenizer, model):
+def render_prediction_tab(vectorizer, model):
     st.header("🚀 Triển khai mô hình")
 
     with st.container(border=True):
         st.markdown("### ✍️ Nhập văn bản cần kiểm tra")
-        user_text = st.text_area("Nội dung bài đăng", height=150, label_visibility="collapsed", placeholder="Ví dụ: Mình cảm thấy rất mệt mỏi, áp lực và chán nản với công việc hiện tại...")
+        user_text = st.text_area(
+            "Nội dung bài đăng",
+            height=150,
+            label_visibility="collapsed",
+            placeholder="Ví dụ: Mình cảm thấy rất mệt mỏi, áp lực và chán nản với công việc hiện tại..."
+        )
 
         c_btn, _, _ = st.columns([1, 2, 2])
         with c_btn:
@@ -285,20 +309,20 @@ def render_prediction_tab(tokenizer, model):
             st.warning("Vui lòng nhập nội dung để dự đoán.")
             return
 
-        with st.spinner('Đang phân tích...'):
-            result = predict_text(user_text, tokenizer, model)
-            pred = int(result["predicted_label"])
-            probabilities = result["probabilities"]
+        with st.spinner("Đang phân tích..."):
+            res = predict_text(user_text, vectorizer, model)
+
+        pred = int(res["predicted_label"])
+        probabilities = res.get("probabilities")
+        cleaned_text = res.get("cleaned_text", user_text)
 
         st.markdown("---")
         st.subheader("🎯 Kết quả phân tích")
-        
-        # Tạo metrics nổi bật
+
         c1, c2, c3 = st.columns(3)
         c1.metric("Cấp độ", f"Mức {pred}")
-        c2.metric("Nhãn dự đoán", get_label_name(pred).split('-')[-1].strip())
-        
-        # Đổi màu cảnh báo tùy theo mức độ
+        c2.metric("Nhãn dự đoán", get_label_name(pred).split("-")[-1].strip())
+
         risk = get_risk_level(pred)
         if pred <= 1:
             c3.success(f"Trạng thái: {risk}")
@@ -307,49 +331,53 @@ def render_prediction_tab(tokenizer, model):
         else:
             c3.error(f"Trạng thái: {risk}")
 
-        st.markdown("**Văn bản sau khi làm sạch (Tiền xử lý):**")
-        st.info(result["cleaned_text"])
+        st.markdown("**Văn bản sau khi làm sạch:**")
+        st.info(cleaned_text)
 
-        st.markdown("### 📊 Chi tiết xác suất")
-        col_chart, col_table = st.columns([2, 1])
-        with col_chart:
-            plot_probability_chart(probabilities)
-        with col_table:
-            prob_df = pd.DataFrame({
-                "Mức độ": [f"Mức {i}" for i in range(len(probabilities))],
-                "Độ tin cậy": [f"{p*100:.2f}%" for p in probabilities],
-            })
-            st.dataframe(prob_df, use_container_width=True, hide_index=True)
+        if probabilities is not None:
+            st.markdown("### 📊 Chi tiết xác suất")
+            col_chart, col_table = st.columns([2, 1])
+            with col_chart:
+                plot_probability_chart(probabilities)
+            with col_table:
+                prob_df = pd.DataFrame({
+                    "Mức độ": [f"Mức {i}" for i in range(len(probabilities))],
+                    "Độ tin cậy": [f"{p*100:.2f}%" for p in probabilities],
+                })
+                st.dataframe(prob_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Mô hình hiện tại không hỗ trợ xác suất dự đoán.")
 
 @st.cache_data
-def get_test_predictions(_tokenizer, _model, _test_df):
-    """
-    Chạy dự đoán trên tập Test và lưu vào cache để không phải chạy lại khi chuyển Tab.
-    """
-    y_true = _test_df["score"].values
+def get_test_predictions(_vectorizer, _model, _test_df):
+    y_true = _test_df["label"].astype(int).values
     y_pred = []
-    
+
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
-    for i, text in enumerate(_test_df["Sentence"]):
-        # Gọi hàm predict_text đã import từ src.inference
-        res = predict_text(text, _tokenizer, _model)
-        y_pred.append(int(res["predicted_label"]))
-        
-        # Cập nhật thanh tiến trình mỗi 5%
-        if i % (max(1, len(_test_df)//20)) == 0:
+
+    for i, text in enumerate(_test_df["text"]):
+        res = predict_text(text, _vectorizer, _model)
+
+        if isinstance(res, dict):
+            res_label = int(res["predicted_label"])
+        else:
+            res_label = int(res[0])
+
+        y_pred.append(res_label)
+
+        if i % max(1, len(_test_df) // 20) == 0:
             progress_bar.progress((i + 1) / len(_test_df))
-            status_text.text(f"⏳ Đang xử lý tập Test: {i}/{len(_test_df)} mẫu...")
-            
+            status_text.text(f"Đang xử lý tập Test: {i + 1}/{len(_test_df)} mẫu...")
+
     progress_bar.empty()
     status_text.empty()
     return y_true, np.array(y_pred)
 
-def render_evaluation_tab(test_df: Optional[pd.DataFrame], tokenizer, model):
+def render_evaluation_tab(test_df: Optional[pd.DataFrame], vectorizer, model):
     st.header("📉 Đánh giá & Hiệu năng mô hình")
 
-    if test_df is None or tokenizer is None or model is None:
+    if test_df is None or vectorizer is None or model is None:
         st.error("❌ Không thể thực hiện đánh giá: Thiếu dữ liệu hoặc Model chưa được tải.")
         return
 
@@ -360,7 +388,7 @@ def render_evaluation_tab(test_df: Optional[pd.DataFrame], tokenizer, model):
     # Nút bấm để kích hoạt (tránh việc app tự chạy nặng mỗi khi người dùng click vào tab)
     if st.button("📊 Bắt đầu đánh giá hiệu năng"):
         with st.spinner("Đang tính toán các chỉ số..."):
-            y_true, y_pred = get_test_predictions(tokenizer, model, test_df)
+            y_true, y_pred = get_test_predictions(vectorizer, model, test_df)
             
             # --- 1. CHỈ SỐ ĐO LƯỜNG (METRICS) ---
             acc = accuracy_score(y_true, y_pred)
@@ -419,7 +447,7 @@ def render_evaluation_tab(test_df: Optional[pd.DataFrame], tokenizer, model):
             errors['Thực tế'] = [get_label_name(t) for t in y_true[mask]]
             
             st.write(f"Tìm thấy **{len(errors)}** mẫu dự đoán sai trên tổng số **{len(test_df)}** mẫu kiểm thử.")
-            st.dataframe(errors[['Sentence', 'Thực tế', 'Dự đoán']].head(10), use_container_width=True)
+            st.dataframe(errors[['text', 'Thực tế', 'Dự đoán']].head(10), use_container_width=True)
 
             with st.expander("📝 Nhận định và hướng cải thiện"):
                 st.markdown(f"""
@@ -442,10 +470,10 @@ st.markdown(
 
 # 2. Load Dữ liệu & Model
 try:
-    tokenizer, model = load_resources()
+    vectorizer, model = load_resources()
     model_ok = True
 except Exception as exc:
-    tokenizer, model = None, None
+    vectorizer, model = None, None
     model_ok = False
 
 train_df, val_df, test_df = load_all_data()
@@ -473,13 +501,13 @@ if menu_selection == "📊 Giới thiệu & EDA":
 
 elif menu_selection == "🚀 Triển khai mô hình":
     if model_ok:
-        render_prediction_tab(tokenizer, model)
+        render_prediction_tab(vectorizer, model)
     else:
         st.error("Mô hình chưa sẵn sàng. Vui lòng kiểm tra lại đường dẫn model trong config.py")
 
 elif menu_selection == "📉 Đánh giá & Hiệu năng":
     if model_ok:
-        # TRUYỀN ĐỦ 3 THAM SỐ: test_df, tokenizer, model
-        render_evaluation_tab(test_df, tokenizer, model)
+        # TRUYỀN ĐỦ 3 THAM SỐ: test_df, vectorizer, model
+        render_evaluation_tab(test_df, vectorizer, model)
     else:
         st.error("Mô hình chưa sẵn sàng. Không thể chạy đánh giá.")

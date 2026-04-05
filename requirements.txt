@@ -1,13 +1,12 @@
 streamlit
-torch
-transformers
 datasets
 sentencepiece
 safetensors
 pandas
 numpy
 scikit-learn
-accelerate
 evaluate
 matplotlib
 seaborn
+joblib
+underthesea
