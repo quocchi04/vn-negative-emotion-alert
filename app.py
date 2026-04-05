@@ -47,8 +47,8 @@ st.set_page_config(
 )
 
 PROJECT_INFO = {
-    "title": "Phân loại bài đăng tiếng Việt theo mức độ cảm xúc tiêu cực bằng PhoBERT nhằm hỗ trợ cảnh báo sớm",
-    "subtitle": "Phân loại bài đăng tiếng Việt bằng PhoBERT",
+    "title": "Phân loại bài đăng tiếng Việt theo mức độ cảm xúc tiêu cực bằng Logistic Regression nhằm hỗ trợ cảnh báo sớm",
+    "subtitle": "Phân loại bài đăng tiếng Việt bằng Logistic Regression",
     "student": "Trần Đức Quốc Chí",
     "masv": "22T1020036",
     "description": (
@@ -180,7 +180,6 @@ def plot_confusion_matrix(cm: np.ndarray, labels):
 def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFrame], test_df: Optional[pd.DataFrame]):
     st.header("📊 Giới thiệu & Khám phá dữ liệu (EDA)")
     
-    # Chuyển phần thông tin sinh viên vào đây, đặt trong một box (container) đẹp mắt
     with st.container(border=True):
         st.markdown("### 🧑‍💻 Thông tin đề tài & Sinh viên")
         st.write(f"**Tên đề tài:** {PROJECT_INFO['title']}")
@@ -199,7 +198,6 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
         )
         return
 
-
     st.subheader("🔍 Mẫu dữ liệu Train")
     st.dataframe(train_df.head(11), use_container_width=True)
 
@@ -208,13 +206,10 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
     missing.columns = ["Cột", "Số lượng thiếu"]
     st.dataframe(missing, use_container_width=True, hide_index=True)
 
-    st.divider() # Tạo đường phân cách ngang đẹp mắt giữa các phần
+    st.divider()
 
-#----------------- 4.trực quan hóa và phân tích dữ liệu---------------------------
-# --- PHẦN BIỂU ĐỒ ---
     st.subheader("📈 Trực quan hóa & Phân tích đặc trưng")
-    
-    # Hàng 1: Phân phối Score và Độ dài văn bản
+
     row1_col1, row1_col2 = st.columns(2)
     with row1_col1:
         if "label" in train_df.columns:
@@ -223,70 +218,60 @@ def render_eda_tab(train_df: Optional[pd.DataFrame], val_df: Optional[pd.DataFra
         if "text" in train_df.columns:
             plot_text_length_distribution(train_df)
 
-    # Tính toán đặc trưng độ dài
-  # Tính toán đặc trưng độ dài
     train_df_copy = train_df.copy()
-    
-    # ĐÃ THÊM .fillna("") ĐỂ CHỐNG LỖI Ô TRỐNG
-    train_df_copy['Length'] = train_df_copy['text'].fillna("").astype(str).apply(lambda x: len(x.split()))
+    train_df_copy["Length"] = train_df_copy["text"].fillna("").astype(str).apply(lambda x: len(x.split()))
 
-    # Hàng 2: Ma trận tương quan (Đặt vào giữa để không bị quá to)
     if "label" in train_df.columns:
-        # Chia làm 3 cột, biểu đồ nằm ở cột giữa (tỷ lệ 1:2:1)
-        _, mid_col, _ = st.columns([1, 2, 1]) 
-        
+        _, mid_col, _ = st.columns([1, 2, 1])
+
         with mid_col:
-            corr_matrix = train_df_copy[['label', 'Length']].corr()
+            corr_matrix = train_df_copy[["label", "Length"]].corr()
             corr_val = corr_matrix.iloc[0, 1]
-            
-            # Giảm figsize xuống (ví dụ 5x3) để biểu đồ trông gọn hơn
-            fig, ax = plt.subplots(figsize=(5, 3.5)) 
-            
-            im = ax.imshow(corr_matrix, cmap='coolwarm', vmin=-1, vmax=1)
+
+            fig, ax = plt.subplots(figsize=(5, 3.5))
+            im = ax.imshow(corr_matrix, cmap="coolwarm", vmin=-1, vmax=1)
             ax.set_xticks([0, 1])
             ax.set_yticks([0, 1])
-            ax.set_xticklabels(['label', 'Độ dài'], fontsize=9)
-            ax.set_yticklabels(['label', 'Độ dài'], fontsize=9)
-            ax.set_title(f"Ma trận tương quan (r = {corr_val:.2f})", fontsize=10, fontweight='bold')
-            
-            # Thêm chỉ số text vào trong các ô của ma trận
+            ax.set_xticklabels(["label", "Độ dài"], fontsize=9)
+            ax.set_yticklabels(["label", "Độ dài"], fontsize=9)
+            ax.set_title(f"Ma trận tương quan (r = {corr_val:.2f})", fontsize=10, fontweight="bold")
+
             for i in range(2):
                 for j in range(2):
-                    ax.text(j, i, f"{corr_matrix.iloc[i, j]:.2f}", 
-                            ha="center", va="center", color="black", fontweight='bold')
-            
+                    ax.text(j, i, f"{corr_matrix.iloc[i, j]:.2f}",
+                            ha="center", va="center", color="black", fontweight="bold")
+
             fig.colorbar(im, ax=ax)
             st.pyplot(fig)
 
-    # PHẦN NHẬN XÉT
-    with st.expander("📝 Phân tích chi tiết đặc trưng dữ liệu", expanded=True):
-            if "label" in train_df.columns:
-                counts = train_df["label"].value_counts(normalize=True).sort_index()
-                # Tính toán chỉ số lệch
-                imbalance_ratio = counts.max() / counts.min()
-                is_imbalanced = "CÓ độ lệch" if imbalance_ratio > 2 else "tương đối CÂN BẰNG"
-                
-                avg_len = train_df_copy['Length'].mean()
-                max_len = train_df_copy['Length'].max()
+    with st.expander("📝 Phân tích chi tiết dữ liệu", expanded=True):
+        if "label" in train_df.columns:
+            counts = train_df["label"].value_counts(normalize=True).sort_index()
 
-                st.markdown(f"#### 1. Đánh giá sự phân bổ nhãn (Labels Distribution)")
-                st.write(f"- **Trạng thái:** Dữ liệu hiện tại **{is_imbalanced}** (Tỷ lệ lệch: {imbalance_ratio:.2f}).")
-                st.write(f"- **Ghi chú:** Nhãn phổ biến nhất chiếm **{counts.max()*100:.1f}%**. Với đặc thù này, các chỉ số như **Macro F1-Score** sẽ phản ánh chính xác hiệu năng mô hình hơn là Accuracy thông thường.")
+            imbalance_ratio = counts.max() / counts.min()
+            is_imbalanced = "CÓ độ lệch" if imbalance_ratio > 2 else "tương đối CÂN BẰNG"
 
-                st.markdown(f"#### 2. Phân tích đặc trưng quan trọng (Key Features)")
-                st.markdown(f"""
-                - **Đặc trưng từ vựng (Semantic Features):** Đây là đặc trưng **quan trọng nhất**. Các từ ngữ mang sắc thái tiêu cực, biểu cảm mạnh là tín hiệu chính để PhoBERT phân loại mức độ.
-                - **Đặc trưng độ dài (Text Length):** - Độ dài trung bình: **{avg_len:.1f}** từ/câu.
-                    - Hệ số tương quan giữa độ dài và nhãn: **{corr_val:.2f}**.
-                    - **Nhận xét:** Hệ số tương quan thấp (gần 0) cho thấy mức độ tiêu cực phụ thuộc vào **ngữ nghĩa từ ngữ** chứ không phụ thuộc vào việc câu đó dài hay ngắn.
-                """)
+            avg_len = train_df_copy["Length"].mean()
+            max_len = train_df_copy["Length"].max()
 
-                st.markdown(f"#### 3. Kết luận về chất lượng dữ liệu")
-                if train_df.isna().sum().sum() == 0:
-                    st.success("✅ Dữ liệu hoàn toàn sạch (0 NaN), không bị trùng lặp, sẵn sàng cho quá trình huấn luyện mô hình PhoBERT.")
-                else:
-                    st.warning("⚠️ Dữ liệu vẫn còn một số giá trị thiếu, cần xử lý trước khi train.")
+            st.markdown("#### 1. Phân bố nhãn")
+            st.write(f"- **Trạng thái:** Dữ liệu **{is_imbalanced}** (Tỷ lệ: {imbalance_ratio:.2f}).")
+            st.write(f"- Nhãn lớn nhất chiếm **{counts.max()*100:.1f}%** → cần ưu tiên **Macro F1-score** khi đánh giá.")
 
+            st.markdown("#### 2. Đặc trưng dữ liệu")
+            st.markdown(f"""
+- **Từ ngữ (TF-IDF):** Là đặc trưng quan trọng nhất, mô hình dựa vào các từ mang cảm xúc như *buồn, không_vui, không_ổn...*
+- **Độ dài câu:**
+    - Trung bình: **{avg_len:.1f}** từ
+    - Max: **{max_len}** từ
+    - **Nhận xét:** Độ dài không ảnh hưởng nhiều, ý nghĩa câu mới là yếu tố quyết định.
+""")
+
+            st.markdown("#### 3. Kết luận")
+            if train_df.isna().sum().sum() == 0:
+                st.success("✅ Dữ liệu sạch, phù hợp để huấn luyện mô hình Logistic Regression.")
+            else:
+                st.warning("⚠️ Còn giá trị thiếu, cần xử lý trước khi train.")
 #-------------------------- Phần 2: Triển khai mô hình  ---------------------------                 
 def render_prediction_tab(vectorizer, model):
     st.header("🚀 Triển khai mô hình")
@@ -451,9 +436,9 @@ def render_evaluation_tab(test_df: Optional[pd.DataFrame], vectorizer, model):
 
             with st.expander("📝 Nhận định và hướng cải thiện"):
                 st.markdown(f"""
-                - **Nhận định:** Với độ chính xác **{acc:.2%}**, PhoBERT chứng minh khả năng hiểu ngữ nghĩa sâu sắc của tiếng Việt, vượt xa các mô hình truyền thống.
-                - **Điểm yếu:** Mô hình vẫn còn nhầm lẫn nhẹ giữa các sắc thái cảm xúc cực đoan (Mức 3 và 4) do tính chất ngôn ngữ trên mạng xã hội thường có ẩn ý hoặc mỉa mai.
-                - **Hướng cải thiện:** Thu thập thêm dữ liệu thực tế cho các nhãn ít mẫu (Mức 1, Mức 4) để tăng độ nhạy bén cho mô hình.
+            - **Nhận định:** Với độ chính xác **{acc:.2%}**, mô hình **Logistic Regression sử dụng đặc trưng TF-IDF** đạt hiệu năng tương đối tốt trong bài toán phân loại cảm xúc tiêu cực tiếng Việt.
+            - **Điểm yếu:** Mô hình còn gặp khó khăn với các câu mang tính **mỉa mai, phủ định hoặc biểu đạt cảm xúc gần nhau**, dẫn đến nhầm lẫn giữa một số mức độ.
+            - **Hướng cải thiện:** Cần mở rộng dữ liệu huấn luyện, đặc biệt ở các nhãn ít mẫu và các mẫu phủ định/ẩn ý, đồng thời tiếp tục tối ưu bước tiền xử lý và biểu diễn đặc trưng.
                 """)
 # --- CHƯƠNG TRÌNH CHÍNH ---
 
