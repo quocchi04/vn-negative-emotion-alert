@@ -13,7 +13,7 @@ data/processed/*.csv
 dataset.py
    |
    v
-tokenized_dataset
+vectorizer_dataset
    |
    v
 train.py
